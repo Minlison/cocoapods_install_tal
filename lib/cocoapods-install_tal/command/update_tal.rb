@@ -1,45 +1,102 @@
 module Pod
     class Command
-        class Update_tal < Update
-          
-            # self.summary = '替代 Cocoapods 原生 install，可以自动解决库中冲突 lib'
-      
-            # self.description = <<-DESC
-            #   替代 Cocoapods 原生 install，可以自动解决库中冲突 lib
-            # DESC
-      
-            def self.options
-              [
-                ['--no-fix', 'not fix conflict after install before generate project'],
-              ].concat(super)
-            end
-            
-            def initialize(argv)
-              @no_fix = argv.flag?('no-fix', false)
-              super
-            end
-      
-            def installer_tal_for_config
-              InstallerTal.new(config.sandbox, config.podfile, config.lockfile, !@no_fix)
-            end
-            
-            def run
-                verify_podfile_exists!
+        class UpdateTal < Command
+          include RepoUpdate
+          include ProjectDirectory
+          self.summary = '替代 Cocoapods 原生 update ，可以自动解决库中冲突 lib'
+    
+          self.description = <<-DESC
+            替代 Cocoapods 原生 update ，可以自动解决库中冲突 lib
+          DESC
 
-                installer = installer_tal_for_config
-                installer.repo_update = repo_update?(:default => true)
-                if @pods
-                  verify_lockfile_exists!
-                  verify_pods_are_installed!
-                  installer.update = { :pods => @pods }
-                else
-                  UI.puts 'Update all pods'.yellow
-                  installer.update = true
-                end
-                installer.install!
-            end
-      
+          self.arguments = [
+            CLAide::Argument.new('POD_NAMES', false, true),
+          ]
+
+          def self.options
+            [
+              ['--sources=https://github.com/artsy/Specs,master', 'The sources from which to update dependent pods. ' \
+              'Multiple sources must be comma-delimited. The master repo will not be included by default with this option.'],
+              ['--exclude-pods=podName', 'Pods to exclude during update. Multiple pods must be comma-delimited.'],
+              ['--no-fix', 'not fix conflict after install before generate project'],
+            ].concat(super)
           end
+
+          def initialize(argv)
+            @pods = argv.arguments! unless argv.arguments.empty?
+            @no_fix = argv.flag?('no-fix', false)
+
+            source_urls = argv.option('sources', '').split(',')
+            excluded_pods = argv.option('exclude-pods', '').split(',')
+            unless source_urls.empty?
+              source_pods = source_urls.flat_map { |url| config.sources_manager.source_with_name_or_url(url).pods }
+              unless source_pods.empty?
+                source_pods = source_pods.select { |pod| config.lockfile.pod_names.include?(pod) }
+                if @pods
+                  @pods += source_pods
+                else
+                  @pods = source_pods unless source_pods.empty?
+                end
+              end
+            end
+
+            unless excluded_pods.empty?
+              @pods ||= config.lockfile.pod_names.dup
+
+              non_installed_pods = (excluded_pods - @pods)
+              unless non_installed_pods.empty?
+                pluralized_words = non_installed_pods.length > 1 ? %w(Pods are) : %w(Pod is)
+                message = "Trying to skip `#{non_installed_pods.join('`, `')}` #{pluralized_words.first} " \
+                        "which #{pluralized_words.last} not installed"
+                raise Informative, message
+              end
+
+              @pods.delete_if { |pod| excluded_pods.include?(pod) }
+            end
+
+            super
+          end
+
+          # Check if all given pods are installed
+          #
+          def verify_pods_are_installed!
+            lockfile_roots = config.lockfile.pod_names.map { |p| Specification.root_name(p) }
+            missing_pods = @pods.map { |p| Specification.root_name(p) }.select do |pod|
+              !lockfile_roots.include?(pod)
+            end
+
+            unless missing_pods.empty?
+              message = if missing_pods.length > 1
+                          "Pods `#{missing_pods.join('`, `')}` are not " \
+                              'installed and cannot be updated'
+                        else
+                          "The `#{missing_pods.first}` Pod is not installed " \
+                              'and cannot be updated'
+                        end
+              raise Informative, message
+            end
+          end
+    
+          def installer_tal_for_config
+            InstallerTal.new(config.sandbox, config.podfile, config.lockfile, !@no_fix)
+          end
+          
+          def run
+              verify_podfile_exists!
+
+              installer = installer_tal_for_config
+              installer.repo_update = repo_update?(:default => true)
+              if @pods
+                verify_lockfile_exists!
+                verify_pods_are_installed!
+                installer.update = { :pods => @pods }
+              else
+                UI.puts 'Update all pods'.yellow
+                installer.update = true
+              end
+              installer.install!
+          end
+        end
     end
   end
   
