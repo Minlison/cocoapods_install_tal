@@ -1,2 +1,5 @@
 require 'cocoapods-install_tal/src/installer_tal'
 require 'cocoapods-install_tal/src/target_validator_tal'
+require 'cocoapods-install_tal/src/config_tal'
+require 'cocoapods-install_tal/src/path_source_tal'
+require 'cocoapods-install_tal/src/sandbox_tal_tal'
