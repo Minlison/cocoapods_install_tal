@@ -69,7 +69,7 @@ GEM
     netrc (0.11.0)
     prettybacon (0.0.2)
       bacon (~> 1.2)
-    rake (12.3.2)
+    rake (13.0.1)
     ruby-macho (1.4.0)
     thread_safe (0.3.6)
     tzinfo (1.2.5)
